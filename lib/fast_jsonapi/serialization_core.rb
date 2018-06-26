@@ -159,8 +159,8 @@ module FastJsonapi
               record_exclude_relationships = exclude_relationships.to_s.split('.').drop(1).join('.').to_sym if exclude_relationships.to_s.starts_with?(item.to_s)
               record_exclude_attributes = exclude_attributes.to_s.split('.').drop(1).join('.').to_sym if exclude_attributes.to_s.starts_with?(item.to_s)
               if remaining_items(items)
-                serializer_records = serializer.get_included_records(inc_obj, remaining_items(items), known_included_objects, nil, attributes, exclude_relationships: record_exclude_relationships, exclude_attributes: record_exclude_attributes)
-                # serializer_records = serializer.get_included_records(inc_obj, remaining_items(items), known_included_objects, nil, attributes, exclude_relationships: exclude_relationships, exclude_attributes: exclude_attributes)
+                # serializer_records = serializer.get_included_records(inc_obj, remaining_items(items), known_included_objects, nil, attributes, exclude_relationships: record_exclude_relationships, exclude_attributes: record_exclude_attributes)
+                serializer_records = serializer.get_included_records(inc_obj, remaining_items(items), known_included_objects, nil, attributes, exclude_relationships: exclude_relationships, exclude_attributes: exclude_attributes)
                 included_records.concat(serializer_records) unless serializer_records.empty?
               end
 
