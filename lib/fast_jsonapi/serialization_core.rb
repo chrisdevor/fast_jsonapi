@@ -72,18 +72,20 @@ module FastJsonapi
         end
       end
 
-      def attributes_hash(record, params = {}, attributes = nil)
+      def attributes_hash(record, params = {}, attributes = nil, exclude_attributes: nil)
         attributes_to_serialize.reject! { |x| !attributes.include?(x) } if attributes
+        attributes_to_serialize.reject! { |x| exclude_attributes.include?(x) } if exclude_attributes
         attributes_to_serialize.each_with_object({}) do |(key, attribute), attr_hash|
           attribute.serialize(record, params, attr_hash)
         end
       end
 
-      def relationships_hash(record, relationships = nil, params = {})
+      def relationships_hash(record, relationships = nil, params = {}, exclude_relationships: nil)
         relationships = relationships_to_serialize if relationships.nil?
 
         relationships.each_with_object({}) do |(_k, relationship), hash|
           name = relationship[:key]
+          next if exclude_relationships&.include?(name)
           empty_case = relationship[:relationship_type] == :has_many ? [] : nil
           hash[name] = {
             data: ids_hash_from_record_and_relationship(record, relationship, params) || empty_case
@@ -91,22 +93,22 @@ module FastJsonapi
         end
       end
 
-      def record_hash(record, params = {}, attributes = nil)
+      def record_hash(record, params = {}, attributes = nil, exclude_relationships: nil, exclude_attributes: nil)
         if cached
           record_hash = Rails.cache.fetch(record.cache_key, expires_in: cache_length, race_condition_ttl: race_condition_ttl) do
             temp_hash = id_hash(id_from_record(record), record_type, true)
-            temp_hash[:attributes] = attributes_hash(record, params, attributes) if attributes_to_serialize.present?
+            temp_hash[:attributes] = attributes_hash(record, params, attributes, exclude_attributes: exclude_attributes) if attributes_to_serialize.present?
             temp_hash[:relationships] = {}
-            temp_hash[:relationships] = relationships_hash(record, cachable_relationships_to_serialize, params) if cachable_relationships_to_serialize.present?
+            temp_hash[:relationships] = relationships_hash(record, cachable_relationships_to_serialize, params, exclude_relationships: exclude_relationships) if cachable_relationships_to_serialize.present?
             temp_hash[:links] = links_hash(record, params) if data_links.present?
             temp_hash
           end
-          record_hash[:relationships] = record_hash[:relationships].merge(relationships_hash(record, uncachable_relationships_to_serialize, params)) if uncachable_relationships_to_serialize.present?
+          record_hash[:relationships] = record_hash[:relationships].merge(relationships_hash(record, uncachable_relationships_to_serialize, params, exclude_relationships: exclude_relationships)) if uncachable_relationships_to_serialize.present?
           record_hash
         else
           record_hash = id_hash(id_from_record(record), record_type, true)
-          record_hash[:attributes] = attributes_hash(record, params, attributes) if attributes_to_serialize.present?
-          record_hash[:relationships] = relationships_hash(record, nil, params) if relationships_to_serialize.present?
+          record_hash[:attributes] = attributes_hash(record, params, attributes, exclude_attributes: exclude_attributes) if attributes_to_serialize.present?
+          record_hash[:relationships] = relationships_hash(record, nil, params, exclude_relationships: exclude_relationships) if relationships_to_serialize.present?
           record_hash[:links] = links_hash(record, params) if data_links.present?
           record_hash
         end
@@ -137,7 +139,7 @@ module FastJsonapi
       end
 
       # includes handler
-      def get_included_records(record, includes_list, known_included_objects, params = {}, attributes = nil)
+      def get_included_records(record, includes_list, known_included_objects, params = {}, attributes = nil, exclude_relationships: nil, exclude_attributes: nil)
         return unless includes_list.present?
 
         includes_list.sort.each_with_object([]) do |include_item, included_records|
@@ -154,8 +156,11 @@ module FastJsonapi
             included_objects = [included_objects] unless relationship_type == :has_many
 
             included_objects.each do |inc_obj|
+              record_exclude_relationships = exclude_relationships.to_s.split('.').drop(1).join('.').to_sym if exclude_relationships.to_s.starts_with?(item.to_s)
+              record_exclude_attributes = exclude_attributes.to_s.split('.').drop(1).join('.').to_sym if exclude_attributes.to_s.starts_with?(item.to_s)
               if remaining_items(items)
-                serializer_records = serializer.get_included_records(inc_obj, remaining_items(items), known_included_objects, nil, attributes)
+                serializer_records = serializer.get_included_records(inc_obj, remaining_items(items), known_included_objects, nil, attributes, exclude_relationships: record_exclude_relationships, exclude_attributes: record_exclude_attributes)
+                # serializer_records = serializer.get_included_records(inc_obj, remaining_items(items), known_included_objects, nil, attributes, exclude_relationships: exclude_relationships, exclude_attributes: exclude_attributes)
                 included_records.concat(serializer_records) unless serializer_records.empty?
               end
 
@@ -164,7 +169,7 @@ module FastJsonapi
 
               known_included_objects[code] = inc_obj
               record_attributes = attributes[item] if attributes.is_a? Hash
-              included_records << serializer.record_hash(inc_obj, params, record_attributes)
+              included_records << serializer.record_hash(inc_obj, params, record_attributes, exclude_relationships: record_exclude_relationships, exclude_attributes: record_exclude_attributes)
             end
           end
         end

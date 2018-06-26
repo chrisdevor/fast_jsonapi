@@ -244,6 +244,22 @@ options[:attributes] = {
 MovieSerializer.new(movie, options).serialized_json
 ```
 
+### Exclude relationships and attributes
+
+```ruby
+options = {}
+options[:exclude_relationships] = [
+  :actors,
+  :'actors.association'
+]
+options[:exclude_attributes] = [
+  :name,
+  :'actors.email'
+]
+
+MovieSerializer.new(movie, options).serialized_json
+```
+
 ### Compound Document
 
 Support for top-level and nested included associations through ` options[:include] `.
